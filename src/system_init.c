@@ -1,9 +1,9 @@
 #include "system_init.h"
 #include "board_init.h"
 #include "core/app_manager.h"
+#include "core/display_manager.h"
 #include "core/event_manager.h"
 #include "core/navigation_manager.h"
-#include "core/screen_manager.h"
 #include "esp_log.h"
 #include "esp_lvgl_port.h"
 #include "services/battery_service.h"
@@ -11,11 +11,11 @@
 #include "services/notification_service.h"
 #include "services/time_service.h"
 #include "ui/apps/system_info_app.h"
-#include "ui/screens/app_launcher_screen.h"
-#include "ui/screens/control_center_screen.h"
-#include "ui/screens/notifications_screen.h"
-#include "ui/screens/quick_access_screen.h"
-#include "ui/screens/watchface_screen.h"
+#include "ui/apps/launcher_app.h"
+#include "ui/apps/control_center_app.h"
+#include "ui/apps/notifications_app.h"
+#include "ui/apps/quick_access_app.h"
+#include "ui/apps/watchface_app.h"
 
 static const char *TAG = "system_init";
 
@@ -39,10 +39,13 @@ esp_err_t system_init(lv_display_t *display) {
   }
 
   lv_indev_t *touch_indev = board_get_touch_indev();
+  if (touch_indev == NULL) {
+    ESP_LOGI(TAG, "Touch input device is NULL - gesture support will be disabled");
+  }
   
-  ret = screen_manager_init(display, touch_indev);
+  ret = display_manager_init(display, touch_indev);
   if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to init screen manager");
+    ESP_LOGE(TAG, "Failed to init display manager");
     return ret;
   }
 
@@ -89,60 +92,59 @@ esp_err_t system_init(lv_display_t *display) {
 
   ESP_LOGI(TAG, "Services initialized");
 
-  // Step 3: Screen Registration
-  ESP_LOGI(TAG, "[3/4] Registering screens...");
+  // Step 3: App Registration
+  ESP_LOGI(TAG, "[3/4] Registering apps...");
 
-  lvgl_port_lock(-1);
+  if (!lvgl_port_lock(pdMS_TO_TICKS(5000))) {
+    ESP_LOGE(TAG, "Failed to acquire LVGL lock");
+    return ESP_ERR_TIMEOUT;
+  }
 
-  ret = screen_manager_register(watchface_screen_get_descriptor());
+  ret = app_manager_register(watchface_app_get_descriptor());
   if (ret != ESP_OK) {
     lvgl_port_unlock();
     ESP_LOGE(TAG, "Failed to register watchface");
     return ret;
   }
 
-  ret = screen_manager_register(app_launcher_screen_get_descriptor());
+  ret = app_manager_register(launcher_app_get_descriptor());
   if (ret != ESP_OK) {
     lvgl_port_unlock();
-    ESP_LOGE(TAG, "Failed to register app launcher");
+    ESP_LOGE(TAG, "Failed to register launcher");
     return ret;
   }
 
-  ret = screen_manager_register(quick_access_screen_get_descriptor());
+  ret = app_manager_register(quick_access_app_get_descriptor());
   if (ret != ESP_OK) {
     lvgl_port_unlock();
     ESP_LOGE(TAG, "Failed to register quick access");
     return ret;
   }
 
-  ret = screen_manager_register(notifications_screen_get_descriptor());
+  ret = app_manager_register(notifications_app_get_descriptor());
   if (ret != ESP_OK) {
     lvgl_port_unlock();
     ESP_LOGE(TAG, "Failed to register notifications");
     return ret;
   }
 
-  ret = screen_manager_register(control_center_screen_get_descriptor());
+  ret = app_manager_register(control_center_app_get_descriptor());
   if (ret != ESP_OK) {
     lvgl_port_unlock();
     ESP_LOGE(TAG, "Failed to register control center");
     return ret;
   }
 
-  lvgl_port_unlock();
-
-  ESP_LOGI(TAG, "All screens registered (5 total)");
-
-  // Step 4: App Registration
-  ESP_LOGI(TAG, "[4/4] Registering apps...");
-
   ret = app_manager_register(system_info_app_get_descriptor());
   if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to register system info app");
+    lvgl_port_unlock();
+    ESP_LOGE(TAG, "Failed to register system info");
     return ret;
   }
 
-  ESP_LOGI(TAG, "All apps registered (1 total)");
+  lvgl_port_unlock();
+
+  ESP_LOGI(TAG, "All apps registered (6 total)");
 
   ESP_LOGI(TAG, "=== System Initialization Complete ===");
   return ESP_OK;
