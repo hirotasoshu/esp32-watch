@@ -23,24 +23,15 @@ static void system_info_deinit(void) {
 /**
  * @brief Gesture handler for app screen
  */
-static void app_gesture_handler(lv_event_t *e) {
-  lv_indev_t *indev = lv_indev_active();
-  if (indev == NULL) return;
-  
-  lv_dir_t dir = lv_indev_get_gesture_dir(indev);
-  ESP_LOGI(TAG, "App gesture: dir=%d", dir);
-  
-  // Let navigation manager handle it (will close app on swipe right)
-  navigation_manager_handle_gesture(dir);
+static void system_info_on_gesture(lv_dir_t direction) {
+  ESP_LOGI(TAG, "System info gesture: dir=%d", direction);
+  navigation_manager_handle_gesture(direction);
 }
 
 static lv_obj_t *system_info_create_ui(void) {
   app_screen = lv_obj_create(NULL);
   lv_obj_set_style_bg_color(app_screen, lv_color_hex(THEME_COLOR_BG), 0);
   lv_obj_clear_flag(app_screen, LV_OBJ_FLAG_SCROLLABLE);
-  
-  // Register gesture handler
-  lv_obj_add_event_cb(app_screen, app_gesture_handler, LV_EVENT_GESTURE, NULL);
 
   // Title
   lv_obj_t *title = lv_label_create(app_screen);
@@ -104,17 +95,15 @@ static void system_info_on_close(void) {
 }
 
 static const app_descriptor_t system_info_descriptor = {
-    .id = APP_SYSTEM_INFO,
+    .id = APP_USER_SYSTEM_INFO,
+    .type = APP_TYPE_USER,
     .name = "System Info",
     .icon = NULL,
-    .init = system_info_init,
-    .deinit = system_info_deinit,
-    .create_ui = system_info_create_ui,
-    .destroy_ui = system_info_destroy_ui,
-    .on_launch = system_info_on_launch,
-    .on_close = system_info_on_close,
-    .on_pause = NULL,
-    .on_resume = NULL,
+    .create = system_info_create_ui,
+    .destroy = system_info_destroy_ui,
+    .on_show = system_info_on_launch,
+    .on_hide = system_info_on_close,
+    .on_gesture = system_info_on_gesture,
 };
 
 const app_descriptor_t *system_info_app_get_descriptor(void) {
