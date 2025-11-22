@@ -1,6 +1,7 @@
 #include "st7789_driver.h"
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
+#include "driver/ledc.h"
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_panel_vendor.h"
@@ -18,9 +19,17 @@ static const char *TAG = "ST7789";
 #define LCD_DRAW_BUFF_DOUBLE 1
 #define LCD_DRAW_BUFF_HEIGHT 50
 
+// PWM settings for backlight
+#define LEDC_TIMER              LEDC_TIMER_0
+#define LEDC_MODE               LEDC_LOW_SPEED_MODE
+#define LEDC_CHANNEL            LEDC_CHANNEL_0
+#define LEDC_DUTY_RES           LEDC_TIMER_8_BIT
+#define LEDC_FREQUENCY          (5000)
+
 static esp_lcd_panel_io_handle_t lcd_io = NULL;
 static esp_lcd_panel_handle_t lcd_panel = NULL;
 static lv_display_t *lvgl_disp = NULL;
+static bool pwm_initialized = false;
 
 // Store config locally
 static st7789_config_t driver_config;
@@ -123,23 +132,67 @@ static esp_err_t st7789_init_impl(const void *config) {
     return ESP_FAIL;
   }
 
+  // Initialize PWM for backlight
+  ledc_timer_config_t ledc_timer = {
+    .speed_mode       = LEDC_MODE,
+    .timer_num        = LEDC_TIMER,
+    .duty_resolution  = LEDC_DUTY_RES,
+    .freq_hz          = LEDC_FREQUENCY,
+    .clk_cfg          = LEDC_AUTO_CLK
+  };
+  ret = ledc_timer_config(&ledc_timer);
+  if (ret != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to configure LEDC timer");
+    return ret;
+  }
+
+  ledc_channel_config_t ledc_channel = {
+    .speed_mode     = LEDC_MODE,
+    .channel        = LEDC_CHANNEL,
+    .timer_sel      = LEDC_TIMER,
+    .intr_type      = LEDC_INTR_DISABLE,
+    .gpio_num       = driver_config.pin_bl,
+    .duty           = 255, // Start at full brightness
+    .hpoint         = 0
+  };
+  ret = ledc_channel_config(&ledc_channel);
+  if (ret != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to configure LEDC channel");
+    return ret;
+  }
+  
+  pwm_initialized = true;
+
   ESP_LOGI(TAG, "ST7789 display initialized (%dx%d)", driver_config.h_res, driver_config.v_res);
   return ESP_OK;
 }
 
 static esp_err_t st7789_set_brightness_impl(uint8_t level) {
-  gpio_set_level(driver_config.pin_bl, level > 0 ? 1 : 0);
-  return ESP_OK;
+  if (!pwm_initialized) {
+    ESP_LOGW(TAG, "PWM not initialized");
+    return ESP_ERR_INVALID_STATE;
+  }
+  
+  esp_err_t ret = ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, level);
+  if (ret != ESP_OK) return ret;
+  
+  return ledc_update_duty(LEDC_MODE, LEDC_CHANNEL);
 }
 
 static esp_err_t st7789_sleep_impl(void) {
-  gpio_set_level(driver_config.pin_bl, 0);
+  if (pwm_initialized) {
+    ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, 0);
+    ledc_update_duty(LEDC_MODE, LEDC_CHANNEL);
+  }
   return esp_lcd_panel_disp_on_off(lcd_panel, false);
 }
 
 static esp_err_t st7789_wakeup_impl(void) {
   esp_err_t ret = esp_lcd_panel_disp_on_off(lcd_panel, true);
-  gpio_set_level(driver_config.pin_bl, 1);
+  if (pwm_initialized) {
+    ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, 255);
+    ledc_update_duty(LEDC_MODE, LEDC_CHANNEL);
+  }
   return ret;
 }
 
