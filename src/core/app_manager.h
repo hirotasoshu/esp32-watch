@@ -4,77 +4,38 @@
 #include "esp_err.h"
 #include "lvgl.h"
 
-/**
- * @brief Application identifiers
- */
 typedef enum {
-  APP_SYSTEM_INFO,
-  APP_MAX // Keep this last
+  APP_TYPE_WATCHFACE,
+  APP_TYPE_SYSTEM,
+  APP_TYPE_USER
+} app_type_t;
+
+typedef enum {
+  APP_WATCHFACE,
+  APP_SYSTEM_LAUNCHER,
+  APP_SYSTEM_QUICK_ACCESS,
+  APP_SYSTEM_NOTIFICATIONS,
+  APP_SYSTEM_CONTROL_CENTER,
+  APP_USER_SYSTEM_INFO,
+  APP_MAX
 } app_id_t;
 
-/**
- * @brief Application descriptor
- */
 typedef struct {
   app_id_t id;
+  app_type_t type;
   const char *name;
-  const lv_img_dsc_t *icon; // Icon for app launcher (can be NULL)
-
-  esp_err_t (*init)(void); // Initialize app
-  void (*deinit)(void);    // Deinitialize app
-
-  lv_obj_t *(*create_ui)(void);         // Create app UI
-  void (*destroy_ui)(lv_obj_t *screen); // Destroy app UI
-
-  void (*on_launch)(void); // Called when app is launched
-  void (*on_close)(void);  // Called when app is closed
-  void (*on_pause)(void);  // Called when app is paused
-  void (*on_resume)(void); // Called when app is resumed
+  const lv_img_dsc_t *icon;
+  lv_obj_t *(*create)(void);
+  void (*destroy)(lv_obj_t *screen);
+  void (*on_show)(void);
+  void (*on_hide)(void);
+  void (*on_gesture)(lv_dir_t direction);
 } app_descriptor_t;
 
-/**
- * @brief Initialize app manager
- *
- * @return esp_err_t ESP_OK on success
- */
 esp_err_t app_manager_init(void);
-
-/**
- * @brief Register an application
- *
- * @param app Application descriptor
- * @return esp_err_t ESP_OK on success
- */
 esp_err_t app_manager_register(const app_descriptor_t *app);
-
-/**
- * @brief Launch an application
- *
- * @param app_id Application ID
- * @return esp_err_t ESP_OK on success
- */
-esp_err_t app_manager_launch(app_id_t app_id);
-
-/**
- * @brief Close current application
- *
- * @return esp_err_t ESP_OK on success
- */
-esp_err_t app_manager_close_current(void);
-
-/**
- * @brief Get current application ID
- *
- * @return app_id_t Current app ID (APP_MAX if none)
- */
+esp_err_t app_manager_show(app_id_t app_id, lv_scr_load_anim_t anim);
 app_id_t app_manager_get_current(void);
+const app_descriptor_t **app_manager_get_user_apps(size_t *count);
 
-/**
- * @brief Get all registered applications
- *
- * @param count Output: number of apps
- * @return const app_descriptor_t** Array of app descriptors
- */
-const app_descriptor_t **app_manager_get_all_apps(size_t *count);
-
-#endif // APP_MANAGER_H
+#endif
