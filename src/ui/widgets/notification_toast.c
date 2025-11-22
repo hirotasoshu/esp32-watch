@@ -14,8 +14,8 @@ static lv_timer_t *dismiss_timer = NULL;
  * @brief Timer callback to auto-dismiss toast
  */
 static void toast_auto_dismiss_cb(lv_timer_t *timer) {
-  notification_toast_dismiss();
   dismiss_timer = NULL;
+  notification_toast_dismiss();
 }
 
 /**
@@ -118,14 +118,13 @@ void notification_toast_show(const notification_t *notification) {
   lv_anim_set_path_cb(&anim, lv_anim_path_ease_out);
   lv_anim_start(&anim);
 
-  lvgl_port_unlock();
-
-  // Auto-dismiss after 3 seconds
+  // Auto-dismiss after 3 seconds (must be inside LVGL lock)
   dismiss_timer = lv_timer_create(toast_auto_dismiss_cb, 3000, NULL);
   lv_timer_set_repeat_count(dismiss_timer, 1);
 
-  ESP_LOGI(TAG, "Toast shown: '%s' - '%s'", notification->title,
-           notification->message);
+  lvgl_port_unlock();
+
+  ESP_LOGI(TAG, "Toast shown");
 }
 
 void notification_toast_dismiss(void) {
@@ -133,13 +132,13 @@ void notification_toast_dismiss(void) {
     return;
   }
 
+  lvgl_port_lock(-1);
+
   // Cancel auto-dismiss timer
   if (dismiss_timer != NULL) {
     lv_timer_del(dismiss_timer);
     dismiss_timer = NULL;
   }
-
-  lvgl_port_lock(-1);
 
   // Slide out animation (to top)
   lv_anim_t anim;
